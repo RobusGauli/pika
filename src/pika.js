@@ -125,7 +125,7 @@ function PikaFactory() {
     withHTTPMethod: function(method) {
       let _type;
       if ((_type) = type(method) !== 'string') {
-        throw new TypeError(`Invalid method name. Must be of type "string" but found ${_type}.`);
+        throw new TypeError(`Invalid method name.Must be of type "string" but found ${_type}.`);
       }
       
       if (Object.values(this.methods).indexOf(method.toLowerCase() === -1) {
