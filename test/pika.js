@@ -8,7 +8,7 @@
  */
 
 import { expect } from 'chai';
-import Greeting from '../src/Greeting';
+import Greeting from '../src/pika';
 
 describe('Greeting', () => {
 

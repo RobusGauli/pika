@@ -7,4 +7,7 @@
  * LICENSE.txt file in the root directory of this source tree.
  */
 
-export Greeting from './Greeting.js';
+ import Pika from './pika';
+ 
+ export default Pika;
+
