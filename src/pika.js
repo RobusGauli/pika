@@ -127,9 +127,9 @@ function PikaFactory() {
       if ((_type) = type(method) !== 'string') {
         throw new TypeError(`Invalid method name.Must be of type "string" but found ${_type}.`);
       }
-      let lMethodName = method.toLowerCase();
-      if (Object.values(this.methods).indexOf(lMethodName) === -1) {
-        throw new Error(`Invalid HTTP methods.Valid methods are ${Object.values(lMethodName).join(', ')}`)
+      
+      if (Object.values(this.methods).indexOf(method.toLowerCase() === -1) {
+        throw new Error(`Invalid HTTP methods.Valid methods are ${Object.values(this.methods).join(', ')}`)
       }
       setGlobalConfig('method', method.toLowerCase())
       return this;
