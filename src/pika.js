@@ -7,6 +7,8 @@
  * LICENSE.txt file in the root directory of this source tree.
  */
 
+ import axios from 'axios';
+ 
 /**
  * Returns the actual type of value.
  *
@@ -40,6 +42,8 @@ function PikaFactory() {
   // this parameters can be overidden by child request
   let globalConfig = {};
 
+  // global handlers for http errors code
+  const globalErrorHandlers = {};
   // sets the global parameters
   function setGlobalConfig(key, value) {
     globalConfig = {
@@ -64,6 +68,27 @@ function PikaFactory() {
       DELETE: 'delete',
       PATCH: 'patch',
       OPTIONS: 'options'
+    },
+    // common http status codes
+    status: {
+      // success codes 2XX
+      OK: 200,
+      CREATED: 201,
+      ACCEPTED: 202,
+      NO_CONTENT: 204,
+      // client error codes 4XX
+      BAD_REQUEST: 400,
+      UNAUTHORIZED: 401,
+      FORBIDDEN: 403,
+      NOT_FOUND: 404,
+      METHOD_NOT_ALLOWED: 405,
+      REQUEST_TIMEOUT: 408,
+      // server error codes 5XX,
+      INTERNAL_SERVER_ERROR: 500,
+      NOT_IMPLEMENTED: 501,
+      BAD_GATEWAY: 502,
+      SERVICE_UNABAILABLE: 503,
+      GATEWAY_TIMEOUT: 504
     },
     // withBaseURL public builder method for global base url
     // it sets the base url parameters in global config
@@ -113,6 +138,7 @@ function PikaFactory() {
      * @returns {object} this
      */
     header: function(key, val) {
+      
       if (type(key) !== 'string' || type(val) !== 'string') {
         throw new TypeError(
           `Invalid Header for key: ${key} and value: ${val}.`
@@ -168,6 +194,34 @@ function PikaFactory() {
 
       return this;
     },
+    error: function(errorCode, cb) {
+      if (
+        type(errorCode) !== 'number' ||
+        type(cb) !== 'function'
+      ) {
+        throw new TypeError(`Invalid argument to error handler for error code ${errorCode}.`);
+      }
+      
+      globalErrorHandlers[errorCode] = cb;
+      
+      return this;
+    },
+    // syntatic sugar over error method for not found error
+    notFound: function(cb) {
+      return this.error(this.status.NOT_FOUND, cb);
+    },
+    badRequest: function(cb) {
+      return this.error(this.status.BAD_REQUEST, cb);
+    },
+    unauthorized: function(cb) {
+      return this.error(this.status.UNAUTHORIZED, cb);
+    },
+    forbiddenRequest: function(cb) {
+      return this.error(this.status.FORBIDDEN, cb);
+    },
+    methodNotAllowed: function(cb) {
+      return this.error(this.status.METHOD_NOT_ALLOWED, cb);
+    },
     create: function() {
       
       return new class {
@@ -211,6 +265,63 @@ function PikaFactory() {
 
             return this;
           }).bind(this);
+        }
+
+        body(body) {
+          if (
+            type(body) === 'undefined' || type(body) === 'null'
+          ) {
+            throw new TypeError('Invalid body. Cannot be null or undefined.');
+          }
+          const { config } = this.requestContext();
+          config.body = body;
+          
+          return this;
+        }
+
+         async json() {
+          const response = await this._makeRequest();
+          
+          return response;
+        }
+
+        async _makeRequest() {
+          // make the request
+          const config = this._prepareAxiosConfig();
+          let response;
+          try {
+            
+            response = await axios(config);
+
+          } catch (error) {
+            // handle the error generated during request
+          } 
+          // clear the requestContext
+          this._clearRequestContext();
+          
+          return response.data;
+        }
+
+        _clearRequestContext() {
+          this.requestCtx = null;
+        }
+
+        _prepareAxiosConfig() {
+          // merge the headers
+          const localRequestContext = this.requestContext();
+
+          const headers = {
+            ...globalHeaders,
+            ...localRequestContext.headers
+          };
+          
+          const config = {
+            ...globalConfig,
+            ...localRequestContext.config,
+            headers
+          };
+
+          return config;
         }
         
       }();
