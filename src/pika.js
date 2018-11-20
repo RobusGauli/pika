@@ -44,6 +44,9 @@ function PikaFactory() {
 
   // global handlers for http errors code
   const globalErrorHandlers = {};
+  // global timeout handler
+  let globalTimeoutHandler = null;
+
   // sets the global parameters
   function setGlobalConfig(key, value) {
     globalConfig = {
@@ -65,8 +68,8 @@ function PikaFactory() {
       GET: 'get',
       PUT: 'put',
       POST: 'post',
-      DELETE: 'delete',
       PATCH: 'patch',
+      DELETE: 'delete',
       OPTIONS: 'options'
     },
     // common http status codes
@@ -89,6 +92,9 @@ function PikaFactory() {
       BAD_GATEWAY: 502,
       SERVICE_UNABAILABLE: 503,
       GATEWAY_TIMEOUT: 504
+    },
+    errorCode: {
+      TIMEOUT: 'ECONNABORTED'
     },
     // withBaseURL public builder method for global base url
     // it sets the base url parameters in global config
@@ -126,6 +132,18 @@ function PikaFactory() {
       }
       setGlobalConfig('timeout', timeout);
 
+      return this;
+    },
+    timeoutHandler(cb) {
+      let _type;
+      if ((_type = type(cb)) !== 'function') {
+        throw new TypeError(
+          `Invalid timeout handler. Must be of type 'function' but found ${_type}.`
+        );
+      }
+
+      globalTimeoutHandler = cb;
+      
       return this;
     },
     /**
@@ -252,7 +270,8 @@ function PikaFactory() {
           return {
             config: {},
             headers: {},
-            errorHandlers: {}
+            errorHandlers: {},
+            timeoutHandler: null
           };
         }
 
@@ -295,9 +314,9 @@ function PikaFactory() {
           }
 
           // attach it to local request context
-          const { errorHandlers } = this.requestContext();
-          errorHandlers[errorCode] = cb;
-
+          const requestCtx = this.requestContext();
+          requestCtx.errorHandlers[errorCode] = cb;
+          
           return this;
         }
         // syntatic sugar over error method for not found error
@@ -320,7 +339,21 @@ function PikaFactory() {
         methodNotAllowed(cb) {
           return this.error(globalInstance.status.METHOD_NOT_ALLOWED, cb);
         }
+        
+      timeoutHandler(cb) {
+        let _type;
+        if ((_type = type(cb)) !== 'function') {
+          throw new TypeError(
+            `Invalid timeout handler. Must be of type 'function' but found ${_type}.`
+          );
+        }
 
+        const requestCtx = this.requestContext();
+        requestCtx.timeoutHandler = cb;
+        
+        return this;
+
+      }
         async _makeRequest() {
           // make the request
           const config = this._prepareAxiosConfig();
@@ -331,8 +364,10 @@ function PikaFactory() {
 
           } catch (error) {
             // handle the error generated during request
-            return this._handleError(error);
+            
+            response = this._handleError(error);
           }
+          console.log('request context called');
           // clear the requestContext
           this._clearRequestContext();
 
@@ -340,19 +375,44 @@ function PikaFactory() {
         }
 
         _handleError(error) {
-          // check for globals
-          const { status } = error.response;
-          const statusCode = status.toString();
-          if (globalErrorHandlers[statusCode]) {
-            return globalErrorHandlers[statusCode](error, this);
-          }
           // check for locals
+          // check for globals
           const requestCtx = this.requestContext();
-          const { errorHandlers } = requestCtx;
-
-          if (errorHandlers[statusCode]) {
-            return errorHandlers[statusCode](error, this);
+          if (error.code && error.code === globalInstance.errorCode.TIMEOUT) {
+            // we have a timeout 
+            
+            // check for the local timeout handler and call if available 
+            const { timeoutHandler } = requestCtx;
+            if (
+              timeoutHandler &&
+              typeof timeoutHandler === 'function'
+            ) {
+              return timeoutHandler(error, this);
+            }
+            // check for the global handler
+            if (
+              globalTimeoutHandler &&
+              typeof globalTimeoutHandler === 'function'
+            ) {
+              return globalTimeoutHandler(error, this);
+            }
+            
           }
+
+          if (error.response) {
+
+            const status = error.response.status.toString();
+
+            const { errorHandlers } = requestCtx;
+            if (errorHandlers[status]) {
+              return errorHandlers[status](error, this);
+            }
+          
+            if (globalErrorHandlers[status]) {
+              return globalErrorHandlers[status](error, this);
+            }
+          }
+          
           // else throw error to the caller
           throw error;
         }
@@ -378,9 +438,7 @@ function PikaFactory() {
 
           return config;
         }
-
       }();
-
     }
   };
 
