@@ -100,8 +100,7 @@ function PikaFactory() {
     // it sets the base url parameters in global config
     // and returns the current instance
     // to be chainable.
-    baseURL: function (baseURL) {
-
+    baseURL: function(baseURL) {
       let _type;
       if ((_type = type(baseURL)) !== 'string') {
         throw new TypeError(
@@ -143,7 +142,7 @@ function PikaFactory() {
       }
 
       globalTimeoutHandler = cb;
-      
+
       return this;
     },
     /**
@@ -155,8 +154,7 @@ function PikaFactory() {
      *
      * @returns {object} this
      */
-    header: function (key, val) {
-
+    header: function(key, val) {
       if (type(key) !== 'string' || type(val) !== 'string') {
         throw new TypeError(
           `Invalid Header for key: ${key} and value: ${val}.`
@@ -166,7 +164,7 @@ function PikaFactory() {
 
       return this;
     },
-    auth: function (authToken) {
+    auth: function(authToken) {
       let _type;
       if ((_type = type(authToken)) !== 'string') {
         throw new TypeError(
@@ -178,7 +176,7 @@ function PikaFactory() {
       return this;
     },
 
-    headers: function (object) {
+    headers: function(object) {
       let _type;
       if ((_type = type(object)) !== 'object') {
         throw new TypeError(
@@ -193,7 +191,7 @@ function PikaFactory() {
 
       return this;
     },
-    method: function (method) {
+    method: function(method) {
       let _type;
       if ((_type = type(method) !== 'string')) {
         throw new TypeError(
@@ -212,12 +210,11 @@ function PikaFactory() {
 
       return this;
     },
-    error: function (errorCode, cb) {
-      if (
-        type(errorCode) !== 'number' ||
-        type(cb) !== 'function'
-      ) {
-        throw new TypeError(`Invalid argument to error handler for error code ${errorCode}.`);
+    error: function(errorCode, cb) {
+      if (type(errorCode) !== 'number' || type(cb) !== 'function') {
+        throw new TypeError(
+          `Invalid argument to error handler for error code ${errorCode}.`
+        );
       }
 
       globalErrorHandlers[errorCode] = cb;
@@ -225,32 +222,31 @@ function PikaFactory() {
       return this;
     },
     // syntatic sugar over error method for not found error
-    notFound: function (cb) {
+    notFound: function(cb) {
       return this.error(this.status.NOT_FOUND, cb);
     },
-    badRequest: function (cb) {
+    badRequest: function(cb) {
       return this.error(this.status.BAD_REQUEST, cb);
     },
-    unauthorized: function (cb) {
+    unauthorized: function(cb) {
       return this.error(this.status.UNAUTHORIZED, cb);
     },
-    forbiddenRequest: function (cb) {
+    forbiddenRequest: function(cb) {
       return this.error(this.status.FORBIDDEN, cb);
     },
-    methodNotAllowed: function (cb) {
+    methodNotAllowed: function(cb) {
       return this.error(this.status.METHOD_NOT_ALLOWED, cb);
     },
-    create: function () {
-
+    create: function() {
       return function(path) {
         return new class {
           constructor() {
             // this request represents child request instance
             // this will override the configuration and headers of parent request
-            // it's value is set to null after request termination 
-            this.path = path;   
+            // it's value is set to null after request termination
+            this.path = path;
             this.requestCtx = null;
-  
+
             // http methods creation
             this.get = this.methodFactory(globalInstance.methods.GET);
             this.put = this.methodFactory(globalInstance.methods.PUT);
@@ -259,15 +255,15 @@ function PikaFactory() {
             this.delete = this.methodFactory(globalInstance.methods.DELETE);
             this.options = this.methodFactory(globalInstance.methods.OPTIONS);
           }
-  
+
           requestContext() {
             if (this.requestCtx) {
               return this.requestCtx;
             }
-  
-            return this.requestCtx = this.createRequestCtx();
+
+            return (this.requestCtx = this.createRequestCtx());
           }
-  
+
           createRequestCtx() {
             return {
               config: {
@@ -279,80 +275,80 @@ function PikaFactory() {
               currentCaller: null
             };
           }
-  
+
           methodFactory(method) {
-            return (function (value) {
+            return function(value) {
               // sets the method name and url of the requst context
               const { config } = this.requestContext();
               if (
-                value && 
-                (method === globalInstance.methods.GET || method === globalInstance.methods.DELETE) &&
+                value &&
+                (method === globalInstance.methods.GET ||
+                  method === globalInstance.methods.DELETE) &&
                 typeof value === 'string'
               ) {
                 config.url = value;
                 config.method = method;
-                
+
                 return this;
               }
               if (
-                value &&
-                type(value) !== 'undefined' || type(value) !== 'null'
+                (value && type(value) !== 'undefined') ||
+                type(value) !== 'null'
               ) {
                 config.data = value;
                 config.method = method;
-                
+
                 return this;
               }
               config.method = method;
-              
+
               return this;
-            }).bind(this);
+            }.bind(this);
           }
-  
+
           body(body) {
-            if (
-              type(body) === 'undefined' || type(body) === 'null'
-            ) {
+            if (type(body) === 'undefined' || type(body) === 'null') {
               throw new TypeError('Invalid body. Cannot be null or undefined.');
             }
             const { config } = this.requestContext();
             config.body = body;
-  
+
             return this;
           }
-  
-           async replay() {
-            // call the request context 
+
+          async replay() {
+            // call the request context
             const requestCtx = this.requestContext();
             if (!requestCtx.currentCaller) {
-              throw new Error('Invalid call to replay."replay" can be called after the first request.');
+              throw new Error(
+                'Invalid call to replay."replay" can be called after the first request.'
+              );
             }
             // call the original request
-  
+
             return await this[requestCtx.currentCaller]();
           }
           async json() {
             const response = await this._json();
-            
+
             return response.data;
           }
-  
+
           // have to create a _json due it's recursive nature
           async _json() {
             // before calling set the current caller into local request context
             this._setCurrentCaller('_json');
-            
+
             const response = await this._makeRequest();
-            
+
             return response;
-            
           }
-  
+
           _setCurrentCaller(caller) {
             const requestCtx = this.requestContext();
             requestCtx.currentCaller = caller;
           }
-  
+
           timeout(timeout) {
             // this sets the global timeout
             let _type;
@@ -363,147 +359,136 @@ function PikaFactory() {
             }
             const requestCtx = this.requestContext();
             requestCtx.config.timeout = timeout;
-      
+
             return this;
           }
-  
+
           error(errorCode, cb) {
-            if (
-              type(errorCode) !== 'number' ||
-              type(cb) !== 'function'
-            ) {
-              throw new TypeError(`Invalid argument to error handler for error code ${errorCode}.`);
+            if (type(errorCode) !== 'number' || type(cb) !== 'function') {
+              throw new TypeError(
+                `Invalid argument to error handler for error code ${errorCode}.`
+              );
             }
-  
+
             // attach it to local request context
             const requestCtx = this.requestContext();
             requestCtx.errorHandlers[errorCode] = cb;
-            
+
             return this;
           }
           // syntatic sugar over error method for not found error
           notFound(cb) {
             return this.error(globalInstance.status.NOT_FOUND, cb);
           }
-  
+
           badRequest(cb) {
             return this.error(globalInstance.status.BAD_REQUEST, cb);
           }
-  
+
           unauthorized(cb) {
             return this.error(globalInstance.status.UNAUTHORIZED, cb);
           }
-  
+
           forbiddenRequest(cb) {
             return this.error(globalInstance.status.FORBIDDEN, cb);
           }
-  
+
           methodNotAllowed(cb) {
             return this.error(globalInstance.status.METHOD_NOT_ALLOWED, cb);
           }
-          
-        timeoutHandler(cb) {
-          let _type;
-          if ((_type = type(cb)) !== 'function') {
-            throw new TypeError(
-              `Invalid timeout handler. Must be of type 'function' but found ${_type}.`
-            );
-          }
-  
-          const requestCtx = this.requestContext();
-          requestCtx.timeoutHandler = cb;
-          
-          return this;
-  
-        }
-        async _makeRequest() {
-          
-          // make the request
-          const config = this._prepareAxiosConfig();
-          let response;
-          try {
-            
-            response = await axios(config);
-  
-          } catch (error) {
-            // handle the error generated during request
-            
-            response = await this._handleError(error);
-          }
-          console.log('request context called');
-          // clear the requestContext
-          this._clearRequestContext();
-  
-          return response;
-        }
-        
-        async _handleError(error) {
-          // check for locals
-          // check for globals
-          const requestCtx = this.requestContext();
-          if (error.code && error.code === globalInstance.errorCode.TIMEOUT) {
-            // we have a timeout 
-            
-            // check for the local timeout handler and call if available 
-            const { timeoutHandler } = requestCtx;
-            if (
-              timeoutHandler &&
-              typeof timeoutHandler === 'function'
-            ) {
-              return await timeoutHandler(error, this);
-            } 
-            // check for the global handler
-            if (
-              globalTimeoutHandler &&
-              typeof globalTimeoutHandler === 'function'
-            ) {
-              return await globalTimeoutHandler(error, this);
+
+          timeoutHandler(cb) {
+            let _type;
+            if ((_type = type(cb)) !== 'function') {
+              throw new TypeError(
+                `Invalid timeout handler. Must be of type 'function' but found ${_type}.`
+              );
             }
-            
+
+            const requestCtx = this.requestContext();
+            requestCtx.timeoutHandler = cb;
+
+            return this;
           }
-          
-          if (error.response) {
-  
-            const status = error.response.status.toString();
-  
-            const { errorHandlers } = requestCtx;
-            if (errorHandlers[status]) {
-              return await errorHandlers[status](error, this);
+          async _makeRequest() {
+            // make the request
+            const config = this._prepareAxiosConfig();
+            let response;
+            try {
+              response = await axios(config);
+            } catch (error) {
+              // handle the error generated during request
+
+              response = await this._handleError(error);
             }
-          
-            if (globalErrorHandlers[status]) {
-              return await globalErrorHandlers[status](error, this);
-            }
+            console.log('request context called');
+            // clear the requestContext
+            this._clearRequestContext();
+
+            return response;
           }
-          // this._clearRequestContext();
-          // else throw error to the caller
-          throw error;
-        }
-  
-        _clearRequestContext() {
-          this.requestCtx = null;
-        }
-  
-        _prepareAxiosConfig() {
-          // merge the headers
-          const localRequestContext = this.requestContext();
-  
-          const headers = {
-            ...globalHeaders,
-            ...localRequestContext.headers
-          };
-  
-          const config = {
-            ...globalConfig,
-            ...localRequestContext.config,
-            headers
-          };
-  
-          return config;
-        }
-      }();
+
+          async _handleError(error) {
+            // check for locals
+            // check for globals
+            const requestCtx = this.requestContext();
+            if (error.code && error.code === globalInstance.errorCode.TIMEOUT) {
+              // we have a timeout
+
+              // check for the local timeout handler and call if available
+              const { timeoutHandler } = requestCtx;
+              if (timeoutHandler && typeof timeoutHandler === 'function') {
+                return await timeoutHandler(error, this);
+              }
+              // check for the global handler
+              if (
+                globalTimeoutHandler &&
+                typeof globalTimeoutHandler === 'function'
+              ) {
+                return await globalTimeoutHandler(error, this);
+              }
+            }
+
+            if (error.response) {
+              const status = error.response.status.toString();
+
+              const { errorHandlers } = requestCtx;
+              if (errorHandlers[status]) {
+                return await errorHandlers[status](error, this);
+              }
+
+              if (globalErrorHandlers[status]) {
+                return await globalErrorHandlers[status](error, this);
+              }
+            }
+            // this._clearRequestContext();
+            // else throw error to the caller
+            throw error;
+          }
+
+          _clearRequestContext() {
+            this.requestCtx = null;
+          }
+
+          _prepareAxiosConfig() {
+            // merge the headers
+            const localRequestContext = this.requestContext();
+
+            const headers = {
+              ...globalHeaders,
+              ...localRequestContext.headers
+            };
+
+            const config = {
+              ...globalConfig,
+              ...localRequestContext.config,
+              headers
+            };
+
+            return config;
+          }
+        }();
       };
-      
     }
   };
 
