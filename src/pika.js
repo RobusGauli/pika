@@ -9,6 +9,7 @@
 
 import axios from 'axios';
 
+// need a re-write may be extends the axios class and add a method to it
 /**
  * Returns the actual type of value.
  *
