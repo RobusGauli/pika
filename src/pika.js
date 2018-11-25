@@ -3,17 +3,21 @@ import axios from 'axios';
 
 const toString = Object.prototype.toString;
 
+function isFactory(match) {
+  return function(val) {
+    return toString.call(val) === match;
+  };
+}
+
 // check to see if val is array
-function isArray(val) {
-  return toString.call(val) === '[object Array]';
-}
+const is = {
+  array: isFactory('[object Array]'),
+  object: isFactory('[object Object]'),
+  string: isFactory('[object String]'),
+  number: isFactory('[object Number]')
+};
 
-// check if the function is object
-function isObject(val) {
-  return toString.call(val) === '[object Object]';
-}
-
-// unversal forEach method
+// forEach function for iterable
 function forEach(obj, fn) {
   if (
     obj === null ||
@@ -23,14 +27,13 @@ function forEach(obj, fn) {
     return;
   }
   
-  // check if obj is iterable and if it is not
-  // make it iterable
+  // make it iterable if it is not
   if (typeof obj !== 'object') {
     obj = [obj];
   }
   
-  // now if it is array
-  if (isArray(obj)) {
+  // for array
+  if (is.array(obj)) {
     
     for (let i = 0, l = obj.length; i < l; i++) {
       fn.call(null, obj[i], i, obj);    
@@ -39,7 +42,7 @@ function forEach(obj, fn) {
     return;
   } 
 
-  // that means we have the object
+  // for object
   for (let key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       fn.call(null, obj[key], key, obj);
@@ -91,11 +94,11 @@ function mergeConfig(config1, config2) {
   });
 
   forEach(['headers', 'auth', 'proxy'], function mergeDeepProperties(prop) {
-    if (isObject(config2[prop])) {
+    if (is.object(config2[prop])) {
       config[prop] = deepMerge(config1[prop], config2[prop]);
     } else if (typeof config2[prop] !== 'undefined') {
       config[prop] = config2[prop];
-    } else if (isObject(config1[prop])) {
+    } else if (is.object(config1[prop])) {
       config[prop] = deepMerge(config1[prop]);
     } else if (typeof config1[prop] !== 'undefined') {
       config[prop] = config1[prop];
@@ -129,36 +132,69 @@ class Pikachu extends axios.Axios {
   }
 }
 
+const throwIfNotFactory = function(predicate, type) {
+  return function(obj) {
+    let shouldThrow = false;
+    let keys = [];
+    forEach(obj, (val, key) => {
+      if (!predicate(val)) {
+        shouldThrow = true;
+        keys.push(key);
+      }
+    });
+
+    if (shouldThrow) {
+      throw new TypeError(`Invalid argument. ${keys.join(' ,')} must be of type ${type}.`); 
+    }
+  };
+};
+
+const throwIfNot = {
+  
+  string: throwIfNotFactory(is.string, 'string'),
+  number: throwIfNotFactory(is.number, 'number')
+};
+
 function pika() {
   
   const AUTHORIZATION_HEADER = 'Authorization';
+
   const globalConfig = {
-    headers: {
-    },
-    auth: {},
-    proxy: {}
+    headers: {}
   };
 
   return {
     baseURL: function(baseURL) {
+      throwIfNot.string({ baseURL });
       globalConfig.baseURL = baseURL;
       
-return this;
+      return this;
     },
+    timeout: function(timeout) {
+      throwIfNot.number({ timeout });
+      globalConfig.timeout = timeout;
+      
+      return this;
+  },
     method: function(method) {
+      throwIfNot.string({ method });
       globalConfig.method = method;
       
-return this;
+      return this;
     },
     header: function(key, value) {
+      throwIfNot.string({ key, value });
       globalConfig.headers[key] = value;
       
-return this;
+      return this;
     },
     authorization: function(auth) {
+      throwIfNot.string({ auth });
+      
       return this.header(AUTHORIZATION_HEADER, auth);
     },
     create: function(config = {}) {
+      // returns the new instance of Axios
       return new Pikachu(globalConfig, config);
     }
   };
