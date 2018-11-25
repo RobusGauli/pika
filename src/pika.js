@@ -14,7 +14,8 @@ const is = {
   array: isFactory('[object Array]'),
   object: isFactory('[object Object]'),
   string: isFactory('[object String]'),
-  number: isFactory('[object Number]')
+  number: isFactory('[object Number]'),
+  function: isFactory('[object Function]')
 };
 
 // forEach function for iterable
@@ -124,11 +125,44 @@ function mergeConfig(config1, config2) {
 
 // Subclass of axios.Axios to return axios instance 
 class Pikachu extends axios.Axios {
-  constructor(globalConfig, config) {
+  
+  /**
+   * 
+   * @param {object} param
+   */
+  constructor({ globalConfig, axiosConfig, error }) {
     // merge the global pika config and axios.defaults config
     let combinedConfig = mergeConfig(axios.defaults, globalConfig);
     // merge the config to make it compatible to axios.create
-    super(mergeConfig(combinedConfig, config));
+    super(mergeConfig(combinedConfig, axiosConfig));
+
+    // initialize the response interceptors if error is providede
+    this._initializeResponseInterceptors(error);
+    
+  }
+
+  _initializeResponseInterceptors(error) {
+    if (!Object.keys(error).length) {
+      return;
+    }
+
+    this.interceptors.response.use(
+      undefined,
+      err => {
+        const { response } = err;
+
+        if (!response) {
+          
+          return Promise.reject(error);
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(error, response.status)) {
+          return Promise.reject(error);
+        }
+        
+        return error[response.status](err);
+      }
+    );
   }
 }
 
@@ -150,9 +184,9 @@ const throwIfNotFactory = function(predicate, type) {
 };
 
 const throwIfNot = {
-  
   string: throwIfNotFactory(is.string, 'string'),
-  number: throwIfNotFactory(is.number, 'number')
+  number: throwIfNotFactory(is.number, 'number'),
+  function: throwIfNotFactory(is.function, 'function')
 };
 
 function pika() {
@@ -163,7 +197,41 @@ function pika() {
     headers: {}
   };
 
+  const error = {};
+
   return {
+    methods: {
+      GET: 'get',
+      PUT: 'put',
+      POST: 'post',
+      PATCH: 'patch',
+      DELETE: 'delete',
+      OPTIONS: 'options'
+    },
+    // common http status codes
+    status: {
+      // success codes 2XX
+      OK: 200,
+      CREATED: 201,
+      ACCEPTED: 202,
+      NO_CONTENT: 204,
+      // client error codes 4XX
+      BAD_REQUEST: 400,
+      UNAUTHORIZED: 401,
+      FORBIDDEN: 403,
+      NOT_FOUND: 404,
+      METHOD_NOT_ALLOWED: 405,
+      REQUEST_TIMEOUT: 408,
+      // server error codes 5XX,
+      INTERNAL_SERVER_ERROR: 500,
+      NOT_IMPLEMENTED: 501,
+      BAD_GATEWAY: 502,
+      SERVICE_UNABAILABLE: 503,
+      GATEWAY_TIMEOUT: 504
+    },
+    errorCode: {
+      TIMEOUT: 'ECONNABORTED'
+    },
     baseURL: function(baseURL) {
       throwIfNot.string({ baseURL });
       globalConfig.baseURL = baseURL;
@@ -175,7 +243,7 @@ function pika() {
       globalConfig.timeout = timeout;
       
       return this;
-  },
+    },
     method: function(method) {
       throwIfNot.string({ method });
       globalConfig.method = method;
@@ -193,9 +261,46 @@ function pika() {
       
       return this.header(AUTHORIZATION_HEADER, auth);
     },
+    error: function(errorCode, cb) {
+      // register the error code
+      throwIfNot.number(errorCode);
+      throwIfNot.function(cb);
+      error[errorCode] = cb;
+
+      return this;
+    },
+    // syntic sugar for
+    badRequest: function(cb) {
+      return this.error(this.status.BAD_REQUEST, cb);
+    },
+    unauthorized: function(cb) {
+      return this.error(this.status.UNAUTHORIZED, cb);
+    },
+    forbidden: function(cb) {
+      return this.error(this.status.FORBIDDEN, cb);
+    },
+    notFound: function(cb) {
+      return this.error(this.status.NOT_FOUND, cb);
+    },
+    methodNotAllowed: function(cb) {
+      return this.error(this.status.METHOD_NOT_ALLOWED, cb);
+    },
+    requestTimeout: function(cb) {
+      return this.error(this.status.REQUEST_TIMEOUT, cb);
+    },
+    internalServerError: function(cb) {
+      return this.error(this.status.INTERNAL_SERVER_ERROR, cb);
+    },
+    notImplemented: function(cb) {
+      return this.error(this.status.NOT_IMPLEMENTED, cb);
+    },
     create: function(config = {}) {
       // returns the new instance of Axios
-      return new Pikachu(globalConfig, config);
+      return new Pikachu({
+        globalConfig,
+        axiosConfig: config,
+        error
+      });
     }
   };
 }
