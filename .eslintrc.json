@@ -1,4 +1,7 @@
 {
+  "env": {
+    "es6": true
+  },
   "parser": "babel-eslint",
   "parserOptions": {
     "ecmaVersion": 2017,
@@ -9,7 +12,7 @@
   ],
   "rules": {
     "no-var": 2,
-    "no-console": 1,
+    "no-console": 0,
     "no-debugger": 2,
     "no-unused-vars": 2,
     "no-unreachable": 2,

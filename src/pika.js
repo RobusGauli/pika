@@ -1,7 +1,7 @@
-
 import axios from 'axios';
 
 const toString = Object.prototype.toString;
+const hasOwnProp = Object.prototype.hasOwnProperty;
 
 function isFactory(match) {
   return function(val) {
@@ -20,28 +20,23 @@ const is = {
 
 // forEach function for iterable
 function forEach(obj, fn) {
-  if (
-    obj === null ||
-    typeof obj === 'undefined' ||
-    typeof fn !== 'function'
-  ) {
+  if (obj === null || typeof obj === 'undefined' || typeof fn !== 'function') {
     return;
   }
-  
+
   // make it iterable if it is not
   if (typeof obj !== 'object') {
     obj = [obj];
   }
-  
+
   // for array
   if (is.array(obj)) {
-    
     for (let i = 0, l = obj.length; i < l; i++) {
-      fn.call(null, obj[i], i, obj);    
+      fn.call(null, obj[i], i, obj);
     }
-    
+
     return;
-  } 
+  }
 
   // for object
   for (let key in obj) {
@@ -49,7 +44,6 @@ function forEach(obj, fn) {
       fn.call(null, obj[key], key, obj);
     }
   }
-  
 }
 
 // merge without mutating the original reference
@@ -58,21 +52,17 @@ function deepMerge(...args) {
 
   args.forEach(arg => {
     forEach(arg, (val, key) => {
-      if (
-        typeof val === 'object' && result[key] === 'object'
-      ) {
+      if (typeof val === 'object' && result[key] === 'object') {
         result[key] = deepMerge(result[key], val);
-      } else if (
-        typeof val === 'object'
-      ) {
+      } else if (typeof val === 'object') {
         result[key] = deepMerge({}, val);
       } else {
         result[key] = val;
       }
     });
   });
-  
-return result;
+
+  return result;
 }
 
 /**
@@ -106,63 +96,86 @@ function mergeConfig(config1, config2) {
     }
   });
 
-  forEach([
-    'baseURL', 'transformRequest', 'transformResponse', 'paramsSerializer',
-    'timeout', 'withCredentials', 'adapter', 'responseType', 'xsrfCookieName',
-    'xsrfHeaderName', 'onUploadProgress', 'onDownloadProgress', 'maxContentLength',
-    'validateStatus', 'maxRedirects', 'httpAgent', 'httpsAgent', 'cancelToken',
-    'socketPath'
-  ], function defaultToConfig2(prop) {
-    if (typeof config2[prop] !== 'undefined') {
-      config[prop] = config2[prop];
-    } else if (typeof config1[prop] !== 'undefined') {
-      config[prop] = config1[prop];
+  forEach(
+    [
+      'baseURL',
+      'transformRequest',
+      'transformResponse',
+      'paramsSerializer',
+      'timeout',
+      'withCredentials',
+      'adapter',
+      'responseType',
+      'xsrfCookieName',
+      'xsrfHeaderName',
+      'onUploadProgress',
+      'onDownloadProgress',
+      'maxContentLength',
+      'validateStatus',
+      'maxRedirects',
+      'httpAgent',
+      'httpsAgent',
+      'cancelToken',
+      'socketPath'
+    ],
+    function defaultToConfig2(prop) {
+      if (typeof config2[prop] !== 'undefined') {
+        config[prop] = config2[prop];
+      } else if (typeof config1[prop] !== 'undefined') {
+        config[prop] = config1[prop];
+      }
     }
-  });
+  );
 
   return config;
-};
+}
 
-// Subclass of axios.Axios to return axios instance 
+// Subclass of axios.Axios to return axios instance
 class Pikachu extends axios.Axios {
-  
   /**
-   * 
+   *
    * @param {object} param
    */
-  constructor({ globalConfig, axiosConfig, error }) {
+  constructor({
+    globalConfig,
+    axiosConfig,
+    errorStatusCallbacks,
+    errorCodeCallbacks
+  }) {
     // merge the global pika config and axios.defaults config
     let combinedConfig = mergeConfig(axios.defaults, globalConfig);
     // merge the config to make it compatible to axios.create
     super(mergeConfig(combinedConfig, axiosConfig));
 
-    // initialize the response interceptors if error is providede
-    this._initializeResponseInterceptors(error);
-    
+    // initialize the response interceptors if error is provided
+    this._initErrorStatusInterceptors(errorStatusCallbacks);
+    // initialize interceptors for error code callbacks
+    this._initErrorCodeInterceptors(errorCodeCallbacks);
   }
 
-  _initializeResponseInterceptors(error) {
+  _initErrorCodeInterceptors(errorCodeCallbacks) {
+    if (!Object.keys(errorCodeCallbacks).length) {
+      return;
+    }
+    this.interceptors.response.use(undefined, err => {
+      return err.response ||
+        !is.string(err.code) ||
+        !hasOwnProp.call(errorCodeCallbacks, err.code)
+        ? Promise.reject(err)
+        : errorCodeCallbacks[err.code].call(null, err);
+    });
+  }
+
+  _initErrorStatusInterceptors(error) {
     if (!Object.keys(error).length) {
       return;
     }
-
-    this.interceptors.response.use(
-      undefined,
-      err => {
-        const { response } = err;
-
-        if (!response) {
-          
-          return Promise.reject(error);
-        }
-
-        if (!Object.prototype.hasOwnProperty.call(error, response.status)) {
-          return Promise.reject(error);
-        }
-        
-        return error[response.status](err);
-      }
-    );
+    this.interceptors.response.use(undefined, err => {
+      return !err.response ||
+        !hasOwnProp.call(error, err.response.status)
+        ? Promise.reject(error)
+        : error[err.response.status].call(null, err);
+    });
   }
 }
 
@@ -178,7 +191,9 @@ const throwIfNotFactory = function(predicate, type) {
     });
 
     if (shouldThrow) {
-      throw new TypeError(`Invalid argument. ${keys.join(' ,')} must be of type ${type}.`); 
+      throw new TypeError(
+        `Invalid argument. ${keys.join(' ,')} must be of type ${type}.`
+      );
     }
   };
 };
@@ -190,14 +205,18 @@ const throwIfNot = {
 };
 
 function pika() {
-  
   const AUTHORIZATION_HEADER = 'Authorization';
 
   const globalConfig = {
     headers: {}
   };
 
-  const error = {};
+  // map of status code and callback that is later registered in interceptors
+  const errorStatusCallbacks = {};
+
+  // map of error code and callback that is registerd in interceptors
+  // these error codes are not generated by remote server
+  const errorCodeCallbacks = {};
 
   return {
     methods: {
@@ -230,42 +249,43 @@ function pika() {
       GATEWAY_TIMEOUT: 504
     },
     errorCode: {
-      TIMEOUT: 'ECONNABORTED'
+      TIMEOUT: 'ECONNABORTED',
+      ECONNREFUSED: 'ECONNREFUSED'
     },
     baseURL: function(baseURL) {
       throwIfNot.string({ baseURL });
       globalConfig.baseURL = baseURL;
-      
+
       return this;
     },
     timeout: function(timeout) {
       throwIfNot.number({ timeout });
       globalConfig.timeout = timeout;
-      
+
       return this;
     },
     method: function(method) {
       throwIfNot.string({ method });
       globalConfig.method = method;
-      
+
       return this;
     },
     header: function(key, value) {
       throwIfNot.string({ key, value });
       globalConfig.headers[key] = value;
-      
+
       return this;
     },
     authorization: function(auth) {
       throwIfNot.string({ auth });
-      
+
       return this.header(AUTHORIZATION_HEADER, auth);
     },
     error: function(errorCode, cb) {
       // register the error code
       throwIfNot.number(errorCode);
       throwIfNot.function(cb);
-      error[errorCode] = cb;
+      errorStatusCallbacks[errorCode] = cb;
 
       return this;
     },
@@ -294,15 +314,27 @@ function pika() {
     notImplemented: function(cb) {
       return this.error(this.status.NOT_IMPLEMENTED, cb);
     },
+    onConnectionRefused: function(cb) {
+      throwIfNot.function(cb);
+      errorCodeCallbacks[this.errorCode.ECONNREFUSED] = cb;
+
+      return this;
+    },
+    onTimeout: function(cb) {
+      throwIfNot.function(cb);
+      errorCodeCallbacks[this.errorCode.TIMEOUT] = cb;
+      
+      return this;
+    },
     create: function(config = {}) {
       // returns the new instance of Axios
       return new Pikachu({
         globalConfig,
         axiosConfig: config,
-        error
+        errorCodeCallbacks,
+        errorStatusCallbacks
       });
     }
   };
 }
 export default pika();
-
