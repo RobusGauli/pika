@@ -65,6 +65,9 @@ function deepMerge(...args) {
   return result;
 }
 
+// This function is directly taken from Axios since it is not exported from the axios library
+// :)
+
 /**
  * Config-specific merge-function which creates a new config-object
  * by merging two configuration objects together.
@@ -289,7 +292,7 @@ function pika() {
 
       return this;
     },
-    // syntic sugar for
+    // syntactic sugar for invalid status codes
     badRequest: function(cb) {
       return this.error(this.status.BAD_REQUEST, cb);
     },
